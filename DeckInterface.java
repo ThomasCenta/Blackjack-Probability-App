@@ -9,25 +9,48 @@
 public interface DeckInterface {
 
   /**
+   * does not alter Deck. Has the purpose of telling the probability of drawing
+   * a card assuming all cards of a given hand have been taken out. Saves
+   * calculation time.
+   *
    *
    * @param rank
    *          this is the rank of the card to get the probability of drawing 1
-   *          is ace, 2-10 are their numbers and 11 is jack, 12 queen, 13 king.
-   * @update this by removing the card with that rank.
+   *          is ace, 2-10 are their numbers - 1 and 10 is jack, 11 queen, 12
+   *          king.
+   * @param cardsTakenOut
+   *          this is the number of cards taken out (hand size)
+   * @param numRank
+   *          the number of the given rank to take out before calculating
+   *          probability (number of that rank in the hand)
    * @return the probability of drawing that rank
    */
-  double drawProbability(int rank);
+  double drawProbability(int rank, int cardsTakenOut, int numRank);
 
   /**
-   * Removes the specified card from the deck.
+   * Adds a card of the specified rank to this.
    *
    * @param rank
-   *          The rank of the card to be removed.
+   *          The rank of the card to be added.
    */
   void addCard(int rank);
 
   /**
+   * Adds a card of the specified rank to this.
+   *
+   * @requires a card of the specified rank is in this.
+   *
+   * @param rank
+   *          The rank of the card to be added.
+   */
+  void removeCard(int rank);
+
+  /**
    * Removes a card at random from the deck.
+   *
+   * @updates this by removing that cards from this
+   *
+   * @requires there is a card in this.
    *
    * @return The rank of the card removed
    */

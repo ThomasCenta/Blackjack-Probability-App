@@ -15,7 +15,15 @@ public interface DealerDeckInterface {
    *          is ace, 2-10 are their numbers and 10 is also face cards.
    * @return the probability of drawing that rank
    */
-  double drawProbability(int rank);
+  double drawProbability(int rank, int cardsTakenOut, int numRank);
+
+  /**
+   * Adds the specified card from the deck.
+   *
+   * @param rank
+   *          The rank of the card to be added.
+   */
+  void addCard(int rank);
 
   /**
    * Removes the specified card from the deck.
@@ -23,6 +31,6 @@ public interface DealerDeckInterface {
    * @param rank
    *          The rank of the card to be removed.
    */
-  void addCard(int rank);
+  void removeCard(int rank);
 
 }

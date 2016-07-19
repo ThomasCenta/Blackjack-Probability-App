@@ -1,3 +1,6 @@
+import java.util.LinkedList;
+import java.util.Queue;
+
 /**
  *
  * @author Thomas Centa
@@ -6,89 +9,97 @@
 
 public class DealerProbabilities implements DealerProbabilitiesInterface {
 
-  private class Hand {
-    /**
-     * The probability of getting this hand. Updated during calculations.
-     */
-    double currentProbability;
-
-    /**
-     * The current value of the hand by blackjack rules (ie. 2 - 21).
-     */
-    int handValue;
-
-    /**
-     * says whether or not this hand has an ace VALUED AT 11.
-     */
-    boolean hasAce;
-
-    /**
-     * An array of size 10 with each index i corresponding to the number of
-     * cards in this hand with rank i + 1.
-     */
-    int[] cardsInHand;
-
-    /**
-     * Pointers to hands reachable by adding one card to this. If a hand is at a
-     * stand position, does not point to other hands.
-     */
-    Hand[] nextHands;
-
-  }
-
-  Hand emptyHand;
-
-  private static boolean compare
-
-  /**
-   *
-   * @param startingHand
-   * @param targetHand
-   * @requires targetHand is reachable from startingHand by adding cards to
-   *           startingHand.
-   * @return true if the startingHand has in its tree the hand equivalent of
-   *         targetHand (ie. both hands have the same cards).
-   */
-  private static boolean hasHand(Hand startingHand, Hand targetHand) {
-    boolean reachable = true;
-    boolean equal = true;
-    int nextCardRank = -1;
-    for (int i = 0; i < startingHand.cardsInHand.length; i++) {
-      if (startingHand.cardsInHand[i] < targetHand.cardsInHand[i]) {
-        reachable = false;
-        equal = false;
-      }else if(startingHand.cardsInHand[i] > targetHand.cardsInHand[i]){
-        nextCardRank = i + 1;
-        equal = false;
-      }
-    }
-    assert reachable : "target hand is not reachable from starting hand";
-
-    if(equal){
-      return true;
-    }else if (startingHand.nextHands.length < nextCardRank - 1){
-      return false;
-    }else{
-      Hand
-    }
-
-    return false;
-  }
+  HandContainer allHands;
 
   /**
    * Default Constructor. Will create tree of hands assuming hitting on soft 17.
    */
-  public DealersProbabilities(){
-    int currentValue = 0;
+  public DealerProbabilities() {
+    this.allHands = new HandContainer();
+    Queue<VariableRankHand> toExpand = new LinkedList<VariableRankHand>();
+    VariableRankHand emptyHand = new VariableRankHand();
+    this.allHands.addHand(emptyHand);
+    toExpand.add(emptyHand);
 
+    while (!toExpand.isEmpty()) {
+      VariableRankHand next = toExpand.remove();
+
+      // if dealer has >= 18 or hard 17, will have to stand
+      if (next.getHandValue() >= 18 || (next.getHandValue() == 17 && !next.getHasAce())) {
+        continue; // otherwise going to do that same thing
+      }
+      for (int i = 0; i < 10; i++) {
+        VariableRankHand createHand = new VariableRankHand(next);
+        createHand.addCard(i);
+        VariableRankHand existingHand = this.allHands.getHand10(createHand);
+        if (existingHand == null) {
+          // since this hand is new, add it to the queue
+          toExpand.add(createHand);
+          this.allHands.addHand(createHand);
+
+        } else { // set create hand to the existing hand.
+          createHand = existingHand;
+        }
+        // the hand is made, add it to the pointers of the previous.
+        next.setNextHand(createHand, i);
+      }
+
+    }
 
   }
 
   @Override
-  public double[] getProbabilities(Deck deck, int[] initialHand,
-      boolean hitOnSoft17) {
+  public double[] getProbabilities(DealerDeck deck, VariableRankHand startingHand, Rules rules) {
 
-    return null;
+    // set all hands probabilities = 0 to start
+    this.allHands.setProbabilitiesToZero();
+    startingHand = this.allHands.getHand10(startingHand);
+    startingHand.setCurrentProbability(1.0);
+    // index 0-3 are values 21 - handValue, 4 is natural, 5 is other 21, 6 is
+    // bust.
+    double[] probabilities = new double[7];
+
+    Queue<VariableRankHand> toExpand = new LinkedList<VariableRankHand>();
+
+    toExpand.add(startingHand);
+    while (!toExpand.isEmpty()) {
+      VariableRankHand next = toExpand.remove();
+      if (rules.dealerStays(next)) { // leaf
+                                     // node
+        int handValue = next.getHandValue(); // saves a bit of looking up.
+
+        if (handValue < 21) {
+          probabilities[handValue - 17] += next.getProbability();
+        } else if (handValue > 21) {
+          probabilities[6] += next.getProbability();
+        } else if (handValue == 21 && next.totalNumCards() == 2) {
+          probabilities[4] += next.getProbability();
+        } else {
+          probabilities[5] += next.getProbability();
+        }
+
+      } else { // not a leaf node
+        for (int i = 0; i < 10; i++) {
+          VariableRankHand pointedHand = next.getNextHand(i);
+          assert pointedHand != null : "non-leaf node has too few children";
+
+          double pointedProb = pointedHand.getProbability();
+          double drawProbability = next.getProbability()
+              * deck.drawProbability(i, next.totalNumCards(), next.numCardRank10(i));
+          pointedHand.setCurrentProbability(pointedProb + drawProbability);
+
+          if (pointedProb == 0.0 && drawProbability > 0.0) { // need to expand
+                                                             // this node again.
+            // adding this drawProbability can quicken up runtime.
+            toExpand.add(pointedHand);
+          }
+
+        }
+      }
+
+    }
+
+    return probabilities;
   }
 
 }
