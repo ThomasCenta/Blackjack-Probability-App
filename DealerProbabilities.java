@@ -11,6 +11,8 @@ public class DealerProbabilities implements DealerProbabilitiesInterface {
 
   HandContainer allHands;
 
+  HandContainer allHandsTest;
+
   /**
    * Default Constructor. Will create tree of hands assuming hitting on soft 17.
    */
@@ -29,14 +31,13 @@ public class DealerProbabilities implements DealerProbabilitiesInterface {
         continue; // otherwise going to do that same thing
       }
       for (int i = 0; i < 10; i++) {
-        VariableRankHand createHand = new VariableRankHand(next);
+        VariableRankHand createHand = new VariableRankHand(next, true);
         createHand.addCard(i);
         VariableRankHand existingHand = this.allHands.getHand10(createHand);
         if (existingHand == null) {
           // since this hand is new, add it to the queue
           toExpand.add(createHand);
           this.allHands.addHand(createHand);
-
         } else { // set create hand to the existing hand.
           createHand = existingHand;
         }
@@ -49,25 +50,28 @@ public class DealerProbabilities implements DealerProbabilitiesInterface {
   }
 
   @Override
-  public double[] getProbabilities(DealerDeck deck, VariableRankHand startingHand, Rules rules) {
+  public double[] getProbabilities(DealerDeck deck, VariableRankHand playerHand, VariableRankHand dealerHand,
+      Rules rules) {
+
+    deck.takeOutHand(playerHand);
 
     // set all hands probabilities = 0 to start
     this.allHands.setProbabilitiesToZero();
-    startingHand = this.allHands.getHand10(startingHand);
-    startingHand.setCurrentProbability(1.0);
+    // dealerHand no longer points to the input hand. Can change as needed
+    dealerHand = this.allHands.getHand10(dealerHand);
+    dealerHand.setCurrentProbability(1.0);
     // index 0-3 are values 21 - handValue, 4 is natural, 5 is other 21, 6 is
     // bust.
     double[] probabilities = new double[7];
 
     Queue<VariableRankHand> toExpand = new LinkedList<VariableRankHand>();
 
-    toExpand.add(startingHand);
+    toExpand.add(dealerHand);
     while (!toExpand.isEmpty()) {
       VariableRankHand next = toExpand.remove();
-      if (rules.dealerStays(next)) { // leaf
-                                     // node
+      if (rules.dealerStays(next)) { // leaf node
         int handValue = next.getHandValue(); // saves a bit of looking up.
-
+        assert handValue >= 17 : "dealer stays on hand value of " + handValue;
         if (handValue < 21) {
           probabilities[handValue - 17] += next.getProbability();
         } else if (handValue > 21) {
@@ -77,7 +81,6 @@ public class DealerProbabilities implements DealerProbabilitiesInterface {
         } else {
           probabilities[5] += next.getProbability();
         }
-
       } else { // not a leaf node
         for (int i = 0; i < 10; i++) {
           VariableRankHand pointedHand = next.getNextHand(i);
@@ -96,10 +99,12 @@ public class DealerProbabilities implements DealerProbabilitiesInterface {
 
         }
       }
-
     }
 
+    deck.addHand(playerHand);
+
     return probabilities;
+
   }
 
 }

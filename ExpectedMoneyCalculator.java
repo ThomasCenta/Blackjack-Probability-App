@@ -15,11 +15,17 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
   private DealerProbabilities dealerCalculator;
 
   /**
+   * This is used for splitting calculations.
+   */
+  private SplittingMoneyCalculator splittingCalculator;
+
+  /**
    * default constructor.
    */
   public ExpectedMoneyCalculator() {
     this.allHands = new HandContainer();
     this.dealerCalculator = new DealerProbabilities();
+    this.splittingCalculator = new SplittingMoneyCalculator();
 
     Queue<VariableRankHand> toExpand = new LinkedList<VariableRankHand>();
     VariableRankHand emptyHand = new VariableRankHand();
@@ -29,13 +35,13 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
     while (!toExpand.isEmpty()) {
       VariableRankHand next = toExpand.remove();
 
-      // if player has >= 21, no need to continue
-      if (next.getHandValue() >= 21) {
-        // assuming no one wants to hit on 21 or bust
+      // if player has > 21, no need to continue
+      if (next.getHandValue() > 21) {
+        // assuming no one wants to hit on bust
         continue;
       }
       for (int i = 0; i < 13; i++) { // add a card for each draw chance
-        VariableRankHand createHand = new VariableRankHand(next);
+        VariableRankHand createHand = new VariableRankHand(next, true);
         createHand.addCard(i);
         VariableRankHand existingHand = null;
         if (createHand.totalNumCards() <= 2) {
@@ -61,21 +67,34 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
   }
 
   @Override
-  public VariableRankHand getHand(VariableRankHand toFind) {
-    assert toFind.getHandValue() <= 21 : "Don't pass in a busted hand";
+  public void getHand(VariableRankHand toFind) {
+    assert toFind.getHandValue() <= 21 : "Don't pass in a busted hand: " + toFind.toString();
+    VariableRankHand calculated = null;
     if (toFind.totalNumCards() <= 2) {
-      return this.allHands.getHand13(toFind);
+      calculated = this.allHands.getHand13(toFind);
     } else {
-      return this.allHands.getHand10(toFind);
+      calculated = this.allHands.getHand10(toFind);
     }
+    assert calculated != null : "could not find hand " + toFind.toString();
+    toFind.setMoneyMadeIfDoubling(calculated.getMoneyMadeIfDoubling());
+    toFind.setMoneyMadeIfHitting(calculated.getMoneyMadeIfHitting());
+    toFind.setMoneyMadeIfStaying(calculated.getMoneyMadeIfStaying());
+    toFind.setMoneyMadeIfSplitting(calculated.getMoneyMadeIfSplitting());
   }
 
   @Override
-  public void setMoney(Deck deck, VariableRankHand startingHand, VariableRankHand dealerHand, Rules rules) {
+  public void setMoney(Deck deck, VariableRankHand startingHand, VariableRankHand dealerHand, Rules rules,
+      boolean withSplitting, int desiredNumSimulations) {
 
     assert startingHand.getHandValue() <= 21 : "Don't pass in busted hands";
+
     // this is to keep track of what hands have been processed
     HandContainer handTracker = new HandContainer();
+
+    for (int i = 0; i < 13; i++) {
+      assert deck.numCard(i) >= (startingHand.numCardRank13(i)
+          + dealerHand.numCardRank13(i)) : "deck does not have the cards in the hands";
+    }
 
     if (startingHand.totalNumCards() <= 2) {
       startingHand = this.allHands.getHand13(startingHand);
@@ -94,40 +113,52 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
       VariableRankHand next = toExpand.remove();
 
       handTracker.addHand(next);
-
-      // take the cards in the hand out of the deck for dealer calculations
-      DealerDeck copy = new DealerDeck(deck);
-      for (int i = 0; i < 10; i++) {
-        for (int j = 0; j < next.numCardRank10(i); j++) {
-          copy.removeCard(i);
-        }
-      }
       // assign staying average to next
-      double[] dealerProbs = this.dealerCalculator.getProbabilities(copy, dealerHand, rules);
+      double[] dealerProbs = this.dealerCalculator.getProbabilities(new DealerDeck(deck), next, dealerHand, rules);
       double avgMoney = rules.moneyMadeOnStaying(next, dealerProbs);
+
+      if (withSplitting && rules.allowedToSplit(next, 0)) {
+        Deck splittingDeck = new Deck(deck);
+        assert next.totalNumCards() == 2 : "splitting hands doesn't have two cards";
+        int rankSplitOn = -1;
+        for (int i = 0; i < 13; i++) {
+          if (next.numCardRank13(i) == 2) {
+            rankSplitOn = i;
+          }
+        }
+        assert rankSplitOn != -1 : "splitting hand is not a pair";
+        double splitting2 = this.splittingCalculator.moneyMadeSplittingSimulation(splittingDeck, rankSplitOn, 0,
+            dealerHand, rules, desiredNumSimulations);
+        next.setMoneyMadeIfSplitting(splitting2);
+      }
 
       next.setMoneyMadeIfStaying(avgMoney);
       // now go on to the hands pointing to this one.
-      if (next.getHandValue() < 21) { // non-leaf node
+      if (next.getHandValue() <= 21) { // non-leaf node
         // only need to calculate hitting and double for non-leaf nodes. (why
         // would you double or hit on bust or blackjack?)
         calculateDouble.push(next);
         calculateHitting.push(next);
 
         for (int i = 0; i < 13; i++) {
-          VariableRankHand temp = next.getNextHand(i);
 
-          // THIS IS THE PLACE TO TEST AND CALCULATE SPLITTING
+          int totalCardsInHands = next.totalNumCards() + dealerHand.totalNumCards();
+          int numCardiInHands = next.numCardRank13(i) + dealerHand.numCardRank13(i);
+          double prob = deck.drawProbability(i, totalCardsInHands, numCardiInHands);
+          if (prob > 0) {// only going to go to a hand if it can be drawn.
+            VariableRankHand temp = next.getNextHand(i);
 
-          VariableRankHand existingHand = null;
-          if (temp.totalNumCards() <= 2) {
-            existingHand = handTracker.getHand13(temp);
-          } else {
-            existingHand = handTracker.getHand10(temp);
-          }
-          if (existingHand == null) {
-            handTracker.addHand(temp);
-            toExpand.add(temp);
+            VariableRankHand existingHand = null;
+            if (temp.totalNumCards() <= 2) {
+              existingHand = handTracker.getHand13(temp);
+            } else {
+              existingHand = handTracker.getHand10(temp);
+            }
+            if (existingHand == null) {
+              handTracker.addHand(temp);
+              toExpand.add(temp);
+            }
+
           }
         }
       }
@@ -135,51 +166,71 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
     // now all hands have expected money made if staying. Next is doubling.
     while (!calculateDouble.isEmpty()) {
       VariableRankHand next = calculateDouble.pop();
-      if (rules.allowedToDouble(next, 0)) {
-        boolean found = false;
-        for (int i = 0; i < doubleHardValuesAllowed.length; i++) {
-          if (doubleHardValuesAllowed[i] == next.getHandValue()) {
-            found = true;
+      if (rules.allowedToDouble(next)) {
+        if (next.getHandValue() > 21) { // not advised to double on this...
+          next.setMoneyMadeIfDoubling(-2); // lose double your money.
+        } else {
+          double avgMoney = 0;
+          for (int i = 0; i < 13; i++) {
+            int totalCardsInHands = next.totalNumCards() + dealerHand.totalNumCards();
+            int numCardiInHands = next.numCardRank13(i) + dealerHand.numCardRank13(i);
+            double drawProbability = deck.drawProbability(i, totalCardsInHands, numCardiInHands);
+            avgMoney += 2 * drawProbability * next.getNextHand(i).getMoneyMadeIfStaying();
           }
+          next.setMoneyMadeIfDoubling(avgMoney);
         }
-        if (!found) {
-          continue; // this is not allowed to double so don't bother with it.
-        }
-      }
-      // need to have at least 2 cards to double down
-      if (next.totalNumCards() < 2) {
-        continue; // just skip this hand
-      }
-      if (next.getHandValue() >= 21) { // not advised to double on this...
-        next.setMoneyMadeIfDoubling(-2); // lose double your money.
-      } else {
-        double avgMoney = 0;
-        for (int i = 0; i < 13; i++) {
-          // there is not really a difference for face cards, but to keep the
-          // code simple, just do it for all codes (still works out)
-          double drawProbability = deck.drawProbability(i, next.totalNumCards(), next.numCardRank13(i));
-          avgMoney += 2 * drawProbability * next.getNextHand(i).getMoneyMadeIfStaying();
-        }
-        next.setMoneyMadeIfDoubling(avgMoney);
       }
     }
-    while (!calculateHitting.isEmpty())
-
-    {
+    while (!calculateHitting.isEmpty()) {
       VariableRankHand next = calculateHitting.pop();
 
-      if (next.getHandValue() >= 21) { // not advised to hit on this...
+      if (next.getHandValue() > 21) { // hitting on a busted hand...
         next.setMoneyMadeIfHitting(-1); // lose your money.
       } else {
         double avgMoney = 0;
         for (int i = 0; i < 13; i++) {
           // there is not really a difference for face cards, but to keep the
           // code simple, just do it for all codes (still works out)
-          double drawProbability = deck.drawProbability(i, next.totalNumCards(), next.numCardRank13(i));
+          int totalCardsInHands = next.totalNumCards() + dealerHand.totalNumCards();
+          int numCardiInHands = next.numCardRank13(i) + dealerHand.numCardRank13(i);
+          double drawProbability = deck.drawProbability(i, totalCardsInHands, numCardiInHands);
           avgMoney += drawProbability * next.getNextHand(i).getMostMoneyMade();
         }
         next.setMoneyMadeIfHitting(avgMoney);
       }
+    }
+  }
+
+  @Override
+  public void setSplitting(int rankSplitOn, double moneyMadeOnSplitting, Deck deck) {
+    VariableRankHand splitHand = new VariableRankHand();
+    splitHand.addCard(rankSplitOn);
+    splitHand.addCard(rankSplitOn);
+    splitHand = this.allHands.getHand13(splitHand);
+    splitHand.setMoneyMadeIfSplitting(moneyMadeOnSplitting);
+    if (splitHand.getBestMove().equals("split")) {
+      // only change prior if splitting is best option.
+      VariableRankHand priorHand = new VariableRankHand();
+      priorHand.addCard(rankSplitOn);
+      priorHand = this.allHands.getHand13(priorHand);
+      if (priorHand.getNextHand(rankSplitOn) != splitHand) {
+        assert false : "hand not pointed to properly";
+      }
+      double avgMoney = 0;
+      for (int i = 0; i < 13; i++) {
+        double drawProbability = deck.drawProbability(i, 1, priorHand.numCardRank13(i));
+        avgMoney += drawProbability * priorHand.getNextHand(i).getMostMoneyMade();
+      }
+      priorHand.setMoneyMadeIfHitting(avgMoney);
+    }
+  }
+
+  @Override
+  public String getBestMove(MinimalHand toFind) {
+    if (toFind.totalNumCards() <= 2) {
+      return this.allHands.getHand13(toFind).getBestMove();
+    } else {
+      return this.allHands.getHand10(toFind).getBestMove();
     }
   }
 

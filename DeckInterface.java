@@ -65,4 +65,28 @@ public interface DeckInterface {
    */
   int numCard(int rank);
 
+  /**
+   * returns the total number of cards in this.
+   *
+   * @return total number of cards in this.
+   */
+  public int numCardsInDeck();
+
+  /**
+   * Takes cards from the hand out of the deck
+   *
+   * @param hand
+   *          hand to take out of the deck
+   * @requires this contains at least one of every card in the hand.
+   */
+  public void takeOutHand(MinimalHand hand);
+
+  /**
+   * Puts cards in the hand into the deck.
+   *
+   * @param hand
+   *          hand to add into the deck
+   */
+  public void addHand(MinimalHand hand);
+
 }

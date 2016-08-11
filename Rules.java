@@ -20,12 +20,16 @@ public class Rules {
       boolean blackjackAfterSplittingAces, double blackjackPayout, boolean noHitSplitAces,
       int[] doubleHardValuesAllowed) {
 
+    // counting null as an empty array (all values allowed).
+    if (doubleHardValuesAllowed == null) {
+      doubleHardValuesAllowed = new int[0];
+    }
     this.hitOnSoft17 = hitOnSoft17;
     this.numTimesAllowedSplitting = numTimesAllowedSplitting;
     this.numTimesAllowedSplittingAces = numTimesAllowedSplittingAces;
     this.blackjackAfterSplittingAces = blackjackAfterSplittingAces;
     this.blackjackPayout = blackjackPayout;
-    this.noHitSplitAce = this.noHitSplitAce;
+    this.noHitSplitAce = noHitSplitAces;
     int[] copy = new int[doubleHardValuesAllowed.length];
     for (int i = 0; i < copy.length; i++) {
       copy[i] = doubleHardValuesAllowed[i];
@@ -40,7 +44,7 @@ public class Rules {
    *          the hand for which this determines whether or not should stay.
    * @return true if dealer stays according to hand and rules.
    */
-  public boolean dealerStays(VariableRankHand dealerHand) {
+  public boolean dealerStays(MinimalHand dealerHand) {
 
     if (dealerHand.getHandValue() >= 18) {
       return true;
@@ -49,23 +53,29 @@ public class Rules {
     } else if (dealerHand.getHandValue() == 17) {
       return true;
     } else { // handValue < 17
-      return true;
+      return false;
     }
   }
 
   /**
-   * Need to look up the rules for this on splitting
+   * Need to look up the rules for this on doubling.
    *
    * @param hand
    *          hand that wants to be doubled on
-   * @param numTimesSplit
-   *          number of times this hand has been split.
    * @return true if this hand can split
    */
-  public boolean allowedToDouble(VariableRankHand hand, int numTimesSplit) {
+  public boolean allowedToDouble(MinimalHand hand) {
 
     boolean canDouble = this.doubleHardValuesAllowed.length == 0;
     if (hand.totalNumCards() < 2) { // can't double
+      canDouble = false;
+    }
+
+    /**
+     * DOUBLE CHECK THIS RULE. DOES IT ONLY APPLY TO HITTING?! DO IT. DO IT. DO
+     * IT. JUST! DO IT!
+     */
+    if (this.noHitSplitAce && hand.getRankSplitOn() == 0) {
       canDouble = false;
     }
     for (int i = 0; i < this.doubleHardValuesAllowed.length; i++) {
@@ -74,6 +84,7 @@ public class Rules {
       }
     }
     return canDouble;
+
   }
 
   /**
@@ -87,13 +98,9 @@ public class Rules {
    * @requires the probabilities in dealerValues add to ~1.
    * @return the average money made by staying on a bet of $1
    */
-  public double moneyMadeOnStaying(VariableRankHand playerHand, double[] dealerValues) {
-    double sum = 0;
-    for (int i = 0; i < dealerValues.length; i++) {
-      sum += dealerValues[i];
-    }
+  public double moneyMadeOnStaying(MinimalHand playerHand, double[] dealerValues) {
+
     assert dealerValues.length == 7 : "dealer values has length " + dealerValues.length + ", not 7";
-    assert sum > 0.999 && sum < 1.001 : "dealer probabilities add to " + sum + " not 1";
 
     double moneyMade = 0;
     if (playerHand.getHandValue() > 21) {
@@ -141,7 +148,7 @@ public class Rules {
    *          the number of times the payer has already split his hand.
    * @return true if the player is allowed to split.
    */
-  public boolean allowedToSplit(VariableRankHand hand, int numTimesSplit) {
+  public boolean allowedToSplit(MinimalHand hand, int numTimesSplit) {
     boolean splittable = false;
     if (hand.totalNumCards() == 2) {
       for (int i = 0; i < 13; i++) {
@@ -159,6 +166,24 @@ public class Rules {
       }
     }
     return splittable;
+  }
+
+  /**
+   * getter for the number of times a player is allowed to hit non aces.
+   *
+   * @return the number of times a player is allowed to hit non aces.
+   */
+  public int numTimesAllowedToSplitNonAces() {
+    return this.numTimesAllowedSplitting;
+  }
+
+  /**
+   * getter for the number of times a player is allowed to hit aces.
+   *
+   * @return the number of times a player is allowed to hit aces.
+   */
+  public int numTimesAllowedToSplitAces() {
+    return this.numTimesAllowedSplittingAces;
   }
 
 }

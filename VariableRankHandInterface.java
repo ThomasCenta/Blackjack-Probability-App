@@ -100,6 +100,14 @@ public interface VariableRankHandInterface {
   public void addCard(int rank);
 
   /**
+   * removes a card with rank given to this.
+   *
+   * @param rank
+   *          0<= rank <= 12
+   */
+  public void removeCard(int rank);
+
+  /**
    *
    * @return true iff this has an ace valued at 11.
    */

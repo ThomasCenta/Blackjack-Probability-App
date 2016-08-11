@@ -21,11 +21,17 @@ public class Deck implements DeckInterface {
   private int[] cardsInDeck;
 
   /**
+   * Random number generator to draw random cards.
+   */
+  private Random rand;
+
+  /**
    * Default Constructor. Makes an empty deck
    */
   public Deck() {
     this.cardsInDeck = new int[13];
     this.numCards = 0;
+    this.rand = new Random();
   }
 
   /**
@@ -38,6 +44,7 @@ public class Deck implements DeckInterface {
       this.cardsInDeck[i] = otherDeck.numCard(i);
       this.numCards += otherDeck.numCard(i);
     }
+    this.rand = new Random();
   }
 
   /**
@@ -52,14 +59,14 @@ public class Deck implements DeckInterface {
     for (int i = 0; i < this.cardsInDeck.length; i++) {
       this.cardsInDeck[i] = 4 * numDecks;
     }
+    this.rand = new Random();
   }
 
   @Override
   public double drawProbability(int rank, int cardsTakenOut, int numRank) {
     double toReturn = 0.0;
     if (this.cardsInDeck[rank] > numRank) {
-      toReturn = (this.cardsInDeck[rank] - numRank) * 1.0
-          / (this.numCards - cardsTakenOut);
+      toReturn = (this.cardsInDeck[rank] - numRank) * 1.0 / (this.numCards - cardsTakenOut);
     }
     return toReturn;
   }
@@ -79,8 +86,7 @@ public class Deck implements DeckInterface {
 
   @Override
   public int removeRandomCard() {
-    Random rand = new Random();
-    int nextCard = rand.nextInt(this.numCards);
+    int nextCard = this.rand.nextInt(this.numCards);
     int sum = -1;
     int currentIndex = 0;
     while (currentIndex < 13) {
@@ -92,7 +98,7 @@ public class Deck implements DeckInterface {
       }
       currentIndex++;
     }
-    //should never reach here, would mean a mismatch in the sum of all cards.
+    // should never reach here, would mean a mismatch in the sum of all cards.
     assert false : "failed to find a random card in deck";
     return -1;
   }
@@ -100,6 +106,39 @@ public class Deck implements DeckInterface {
   @Override
   public int numCard(int rank) {
     return this.cardsInDeck[rank];
+  }
+
+  @Override
+  public int numCardsInDeck() {
+    return this.numCards;
+  }
+
+  @Override
+  public void takeOutHand(MinimalHand hand) {
+    for (int i = 0; i < 13; i++) {
+      for (int j = 0; j < hand.numCardRank13(i); j++) {
+        this.removeCard(i); // let the kernel method take care of it.
+      }
+    }
+  }
+
+  @Override
+  public void addHand(MinimalHand hand) {
+    for (int i = 0; i < 13; i++) {
+      for (int j = 0; j < hand.numCardRank13(i); j++) {
+        this.addCard(i); // let the kernel method take care of it.
+      }
+    }
+  }
+
+  @Override
+  public String toString() {
+    String toReturn = "";
+    for (int i = 0; i < 12; i++) {
+      toReturn += this.cardsInDeck[i] + " ";
+    }
+    toReturn += this.cardsInDeck[12];
+    return toReturn;
   }
 
 }

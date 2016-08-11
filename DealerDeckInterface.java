@@ -33,4 +33,32 @@ public interface DealerDeckInterface {
    */
   void removeCard(int rank);
 
+  /**
+   * Returns the number of cards with the given rank in this.
+   *
+   * @param rank
+   *          the rank in question
+   * @return see above.
+   */
+  int numCardRank(int rank);
+
+  /**
+   * Takes cards from the hand out of the deck
+   *
+   * @param hand
+   *          hand to take out of the deck
+   * @requires this contains at least one of every card in the hand.
+   */
+  public void takeOutHand(VariableRankHand hand);
+
+  /**
+   * Puts cards in the hand into the deck.
+   *
+   * @param hand
+   *          hand to add into the deck
+   */
+  public void addHand(VariableRankHand hand);
+
+  int numCardsInDeck();
+
 }

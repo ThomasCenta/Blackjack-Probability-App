@@ -13,20 +13,32 @@
 public interface ExpectedMoneyCalculatorInterface {
 
   /**
+   * sets the values for hitting, staying, doubling, and splitting to the values
+   * of the equivalent hand in this.
    *
    * @param toFind
    *          hand to find. Uses the 10 card equivalent if it has > 2 cards.
+   * @updates toFind
    * @requires toFind is not a bust (ie. value > 21)
-   * @return pointer to that hand (presumably with calculations done).
    */
-  public VariableRankHand getHand(VariableRankHand toFind);
+  public void getHand(VariableRankHand toFind);
 
   /**
-   * Going to assume the hand passed in has not been split
+   * Returns a string corresponding to the best move for toFind given the
+   * calculations in this.
+   *
+   * @param toFind
+   *          the equivalent hand to find in this. Bases it off of 10 card ranks
+   *          if size <= 2. 13 ranks otherwise.
+   * @return "stay", "hit", "split", or "double"
+   */
+  public String getBestMove(MinimalHand toFind);
+
+  /**
+   * Going to assume the hand passed in has not been split before.
    *
    * @param deck
-   *          deck with no cards from the hand taken out, but with cards from
-   *          the dealer taken out.
+   *          original deck with no cards of either hand taken out.
    * @param startingHand
    *          starting hand to calculate from
    * @param dealerHand
@@ -34,6 +46,22 @@ public interface ExpectedMoneyCalculatorInterface {
    * @param rules
    *          the rules object corresponding to this game of blackjack.
    */
-  public void setMoney(Deck deck, VariableRankHand playerHand, VariableRankHand dealerHand, Rules rules);
+  public void setMoney(Deck deck, VariableRankHand playerHand, VariableRankHand dealerHand, Rules rules,
+      boolean withSplitting, int desiredNumSimulations);
+
+  /**
+   * sets the money made on splitting for the hand made when splitting on the
+   * rank rankSplitOn. WILL ALSO UPDATE THE HITTING VALUES FOR THE HANDS OF SIZE
+   * ONE AND ZERO as these are affected by splitting.
+   *
+   * @param rankSPlitOn
+   *          the rank that the hand is split on which is about to have its
+   *          money set.
+   * @param moneyMadeOnSplitting
+   *          the money made on average when the given hand is split.
+   * @param deck
+   *          this is the deck with the dealer cards taken out.
+   */
+  public void setSplitting(int rankSplitOn, double moneyMadeOnSplitting, Deck deck);
 
 }

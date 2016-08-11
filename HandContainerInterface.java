@@ -11,7 +11,7 @@ public interface HandContainerInterface {
 
   /**
    * Adds the given hand to this. If the given hand is already in this, a
-   * duplicate will NOT be added.
+   * duplicate will NOT be added. NO HAND FOR YOU!
    *
    * @param toAdd
    *          the hand to add to this.
@@ -27,7 +27,7 @@ public interface HandContainerInterface {
    * @return a pointer to the hand in this that is equivalent to the one passed
    *         in or null if none exists.
    */
-  public VariableRankHand getHand10(VariableRankHand equivalentHand);
+  public VariableRankHand getHand10(MinimalHand equivalentHand);
 
   /**
    * Returns a pointer to the hand that is equivalent to the given hand based on
@@ -38,7 +38,7 @@ public interface HandContainerInterface {
    * @return a pointer to the hand in this that is equivalent to the one passed
    *         in or null if none exists.
    */
-  public VariableRankHand getHand13(VariableRankHand equivalentHand);
+  public VariableRankHand getHand13(MinimalHand equivalentHand);
 
   /**
    * Sets all the probabilities in this to zero.

@@ -67,4 +67,43 @@ public class DealerDeck implements DealerDeckInterface {
 
   }
 
+  @Override
+  public int numCardRank(int rank) {
+    assert rank < 10 && rank >= 0 : "rank " + rank + " is not a valid rank";
+    return this.cardsInDeck[rank];
+  }
+
+  @Override
+  public int numCardsInDeck() {
+    return this.numCards;
+  }
+
+  @Override
+  public void takeOutHand(VariableRankHand hand) {
+    for (int i = 0; i < 10; i++) {
+      for (int j = 0; j < hand.numCardRank10(i); j++) {
+        this.removeCard(i); // let the kernel method take care of it.
+      }
+    }
+  }
+
+  @Override
+  public void addHand(VariableRankHand hand) {
+    for (int i = 0; i < 10; i++) {
+      for (int j = 0; j < hand.numCardRank10(i); j++) {
+        this.addCard(i); // let the kernel method take care of it.
+      }
+    }
+  }
+
+  @Override
+  public String toString() {
+    String toReturn = "";
+    for (int i = 0; i < 9; i++) {
+      toReturn += this.cardsInDeck[i] + " ";
+    }
+    toReturn += this.cardsInDeck[9];
+    return toReturn;
+  }
+
 }
