@@ -15,17 +15,151 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
   private DealerProbabilities dealerCalculator;
 
   /**
-   * This is used for splitting calculations.
+   * Going to assume this is the players first time splitting
+   *
+   * @param deck
+   *          deck without dealer
+   * @param rankSplitOn
+   * @param dealerHand
+   * @param rules
+   * @param desiredNumSimulations
+   * @param playerAid
+   *          needs this to have hands all hands, except the empty hand,
+   *          calculated for double, hit, and stay.
+   * @return
    */
-  private SplittingMoneyCalculator splittingCalculator;
+  private static double splittingCalculator(Deck deck, int rankSplitOn, VariableRankHand dealerHand, Rules rules,
+      int desiredNumSimulations, ExpectedMoneyCalculator originalAid) {
+
+    // finish this startingHands thing later.
+    VariableRankHand playersFirstHand = new VariableRankHand();
+    playersFirstHand.addCard(rankSplitOn);
+    playersFirstHand.setSplitHand(rankSplitOn);
+    ExpectedMoneyCalculator[] playerAid = null;
+    int deckAllowsSplit = deck.numCard(rankSplitOn) - dealerHand.numCardRank13(rankSplitOn) - 1;
+    if (rankSplitOn == 0) {
+      int rulesSplit = rules.numTimesAllowedToSplitAces();
+      int canSplit = Math.min(deckAllowsSplit, rulesSplit);
+      playerAid = new ExpectedMoneyCalculator[canSplit];
+    } else {
+      int canSplit = Math.min(deckAllowsSplit, rules.numTimesAllowedToSplitAces());
+      playerAid = new ExpectedMoneyCalculator[canSplit];
+    }
+    for (int i = 0; i < playerAid.length; i++) {
+      playerAid[i] = new ExpectedMoneyCalculator(originalAid);
+    }
+    // These queues will store finished hands in the simulations. They can be
+    // reused so declare them now to save a small amount of time.
+    Queue<MinimalHand> finishedHands = new LinkedList<MinimalHand>();
+    Queue<Double> finishedHandBets = new LinkedList<Double>();
+    // this will be the dealer object used in the simulation.
+    Dealer dealer = new Dealer();
+    // empty hand will be needed for calculations
+    MinimalHand emptyHand = new MinimalHand();
+    /**
+     * now for the simulations, notice that playing three hands may have the
+     * option to split into four. To make that decision, knowledge must be known
+     * about the money made by playing four hands. So this will start at the max
+     * number of hands and work its way down to two.
+     */
+    for (int startingNumHands = playerAid.length + 1; startingNumHands >= 2; startingNumHands--) {
+      // start by making a copy of the deck and taking the cards in the hand
+      // out.
+      Deck noHandsDeck = new Deck(deck);
+      for (int j = 0; j < startingNumHands; j++) {
+        noHandsDeck.removeCard(rankSplitOn); // take one out for each hand.
+      }
+      double moneyMade = 0;
+      int currentNumSimulations = 0;
+      while (currentNumSimulations < desiredNumSimulations) {
+        Deck currentDeck = new Deck(noHandsDeck);
+        int numHandsPlaying = startingNumHands;
+        Queue<MinimalHand> handsToPlay = new LinkedList<MinimalHand>();
+        for (int j = 0; j < startingNumHands; j++) {
+          MinimalHand randomStart = new MinimalHand(playersFirstHand);
+          randomStart.addCard(currentDeck.removeRandomCard());
+          handsToPlay.add(randomStart);
+        }
+
+        // now the initial hands and deck have been set, so play through them.
+        while (!handsToPlay.isEmpty()) {
+          MinimalHand currentPlayerHand = handsToPlay.poll();
+          String bestMove = playerAid[numHandsPlaying - 2].getBestMove(currentPlayerHand);
+          double currentBet = 1.0;
+          boolean forceStay = false;
+          while (!bestMove.equals("stay") && !forceStay) {
+            if (bestMove.equals("hit")) {
+              currentPlayerHand.addCard(currentDeck.removeRandomCard());
+              if (currentPlayerHand.getHandValue() >= 21) {
+                forceStay = true;
+              } else {
+                bestMove = playerAid[numHandsPlaying - 2].getBestMove(currentPlayerHand);
+              }
+            } else if (bestMove.equals("double")) {
+              currentPlayerHand.addCard(currentDeck.removeRandomCard());
+              forceStay = true;
+              currentBet = 2;
+            } else if (bestMove.equals("split")) {
+              MinimalHand newHand = new MinimalHand();
+              newHand.addCard(rankSplitOn);
+              newHand.addCard(currentDeck.removeRandomCard());
+              handsToPlay.add(newHand);
+              // take away one of the pair and add a random card.
+              currentPlayerHand.removeCard(rankSplitOn);
+              currentPlayerHand.addCard(currentDeck.removeRandomCard());
+              numHandsPlaying++;
+              bestMove = playerAid[numHandsPlaying - 2].getBestMove(currentPlayerHand);
+            } else {
+              assert false : "something went wrong"; // idk why I put this here.
+            }
+            if (bestMove == null) {
+              System.out.println(currentPlayerHand);
+              System.out.println(currentDeck);
+            }
+          }
+          // this hand is completed. Add it to the queue of finished hands.
+          finishedHands.add(currentPlayerHand);
+          finishedHandBets.add(currentBet);
+        }
+        // all player hands played. Get the Dealers hand.
+        currentDeck.addHand(dealerHand);
+        boolean[] temp = dealer.getDealerValue(currentDeck, rules, dealerHand, emptyHand);
+        double[] dealerResults = new double[7]; // for compatibility with rules.
+        for (int i = 0; i < 7; i++) {
+          if (temp[i]) {
+            dealerResults[i] = 1.0;
+          }
+        }
+        while (!finishedHands.isEmpty()) {
+          double moneyResult = rules.moneyMadeOnStaying(finishedHands.poll(), dealerResults);
+          moneyMade += finishedHandBets.poll() * moneyResult;
+        }
+        assert finishedHandBets.isEmpty() : "bets queue not empty!";
+        currentNumSimulations++;
+      }
+      double avgMoneyMade = moneyMade / desiredNumSimulations;
+
+      if (startingNumHands == 2) {
+        return avgMoneyMade;
+      } else {
+        Deck splittingDeck = new Deck(deck);
+        splittingDeck.takeOutHand(dealerHand);
+        playerAid[startingNumHands - 3].setSplitting(rankSplitOn, avgMoneyMade, splittingDeck);
+      }
+
+    }
+    assert false : "should not have reached this far";
+    return 0;
+
+  }
 
   /**
    * default constructor.
    */
-  public ExpectedMoneyCalculator() {
+  public ExpectedMoneyCalculator(Deck deck, VariableRankHand startingHand, VariableRankHand dealerHand, Rules rules,
+      boolean withSplitting, int desiredNumSimulations) {
     this.allHands = new HandContainer();
     this.dealerCalculator = new DealerProbabilities();
-    this.splittingCalculator = new SplittingMoneyCalculator();
 
     Queue<VariableRankHand> toExpand = new LinkedList<VariableRankHand>();
     VariableRankHand emptyHand = new VariableRankHand();
@@ -63,12 +197,55 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
       }
 
     }
+    this.setMoney(deck, startingHand, dealerHand, rules, withSplitting, desiredNumSimulations);
 
+  }
+
+  public ExpectedMoneyCalculator(ExpectedMoneyCalculator otherCalc) {
+    this.allHands = new HandContainer();
+    this.dealerCalculator = new DealerProbabilities();
+
+    Queue<VariableRankHand> toExpand = new LinkedList<VariableRankHand>();
+    VariableRankHand emptyHand = new VariableRankHand();
+    toExpand.add(emptyHand);
+    this.allHands.addHand(emptyHand);
+
+    while (!toExpand.isEmpty()) {
+      VariableRankHand next = toExpand.remove();
+
+      // if player has > 21, no need to continue
+      if (next.getHandValue() > 21) {
+        // assuming no one wants to hit on bust
+        continue;
+      }
+      for (int i = 0; i < 13; i++) { // add a card for each draw chance
+        VariableRankHand createHand = new VariableRankHand(next, true);
+        createHand.addCard(i);
+        VariableRankHand existingHand = null;
+        if (createHand.totalNumCards() <= 2) {
+          existingHand = this.allHands.getHand13(createHand);
+        } else {
+          existingHand = this.allHands.getHand10(createHand);
+        }
+        if (existingHand == null) {
+          // since this hand is new, add it to the queue
+          otherCalc.getHand(createHand);
+          toExpand.add(createHand);
+          this.allHands.addHand(createHand);
+        } else {
+          createHand = existingHand;
+        }
+        // the next hand is made, add it to the pointers
+        // VariableRankHand methods already take care of 10 and 13 rank
+        // differences w.r.t. pointers.
+        next.setNextHand(createHand, i);
+      }
+
+    }
   }
 
   @Override
   public void getHand(VariableRankHand toFind) {
-    assert toFind.getHandValue() <= 21 : "Don't pass in a busted hand: " + toFind.toString();
     VariableRankHand calculated = null;
     if (toFind.totalNumCards() <= 2) {
       calculated = this.allHands.getHand13(toFind);
@@ -82,11 +259,36 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
     toFind.setMoneyMadeIfSplitting(calculated.getMoneyMadeIfSplitting());
   }
 
-  @Override
-  public void setMoney(Deck deck, VariableRankHand startingHand, VariableRankHand dealerHand, Rules rules,
+  /**
+   * Does not set splitting. This should not be called twice on the same object.
+   *
+   * @param deck
+   *          original deck with no cards of either hand taken out.
+   * @param startingHand
+   *          starting hand to calculate from
+   * @param dealerHand
+   *          hand of the dealer.
+   * @param rules
+   *          the rules object corresponding to this game of blackjack.
+   * @requires desiredNumSimulations > 0
+   */
+  private void setMoney(Deck deck, VariableRankHand startingHand, VariableRankHand dealerHand, Rules rules,
       boolean withSplitting, int desiredNumSimulations) {
+    assert desiredNumSimulations > 0 : "what's the point of zero simulations";
 
     assert startingHand.getHandValue() <= 21 : "Don't pass in busted hands";
+
+    // if this hand can be split, then the starting hand must be one card lower
+    if (withSplitting && rules.allowedToSplit(startingHand, 0)) {
+      boolean split = false;
+      for (int i = 0; i < 13 && !split; i++) {
+        if (startingHand.numCardRank13(i) == 2) {
+          startingHand.removeCard(i);
+          split = true;
+        }
+      }
+      assert split : "hand " + startingHand + " was not split";
+    }
 
     // this is to keep track of what hands have been processed
     HandContainer handTracker = new HandContainer();
@@ -107,6 +309,7 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
     // have to calculate double and hit average starting with greatest hand size
     Stack<VariableRankHand> calculateDouble = new Stack<VariableRankHand>();
     Stack<VariableRankHand> calculateHitting = new Stack<VariableRankHand>();
+    Queue<VariableRankHand> calculateSplitting = new LinkedList<VariableRankHand>();
 
     toExpand.add(startingHand);
     while (!toExpand.isEmpty()) {
@@ -118,18 +321,7 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
       double avgMoney = rules.moneyMadeOnStaying(next, dealerProbs);
 
       if (withSplitting && rules.allowedToSplit(next, 0)) {
-        Deck splittingDeck = new Deck(deck);
-        assert next.totalNumCards() == 2 : "splitting hands doesn't have two cards";
-        int rankSplitOn = -1;
-        for (int i = 0; i < 13; i++) {
-          if (next.numCardRank13(i) == 2) {
-            rankSplitOn = i;
-          }
-        }
-        assert rankSplitOn != -1 : "splitting hand is not a pair";
-        double splitting2 = this.splittingCalculator.moneyMadeSplittingSimulation(splittingDeck, rankSplitOn, 0,
-            dealerHand, rules, desiredNumSimulations);
-        next.setMoneyMadeIfSplitting(splitting2);
+        calculateSplitting.add(next);
       }
 
       next.setMoneyMadeIfStaying(avgMoney);
@@ -199,6 +391,21 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
         next.setMoneyMadeIfHitting(avgMoney);
       }
     }
+    while (!calculateSplitting.isEmpty()) {
+      VariableRankHand next = calculateSplitting.poll();
+      Deck splittingDeck = new Deck(deck);
+      splittingDeck.takeOutHand(dealerHand);
+      int rankSplitOn = -1;
+      for (int i = 0; i < 13 && rankSplitOn == -1; i++) {
+        if (next.numCardRank13(i) == 2) {
+          rankSplitOn = i;
+        }
+      }
+      assert rankSplitOn != -1 : "hand " + startingHand + " was not a pair";
+      double moneyMadeOnSplitting = splittingCalculator(splittingDeck, rankSplitOn, dealerHand, rules,
+          desiredNumSimulations, this);
+      this.setSplitting(rankSplitOn, moneyMadeOnSplitting, splittingDeck);
+    }
   }
 
   @Override
@@ -222,6 +429,17 @@ public class ExpectedMoneyCalculator implements ExpectedMoneyCalculatorInterface
         avgMoney += drawProbability * priorHand.getNextHand(i).getMostMoneyMade();
       }
       priorHand.setMoneyMadeIfHitting(avgMoney);
+      // now change the empty hand
+      VariableRankHand emptyHand = new VariableRankHand();
+      emptyHand = this.allHands.getHand13(emptyHand);
+      if (emptyHand != null) {
+        double avgEmptyMoney = 0;
+        for (int i = 0; i < 13; i++) {
+          double drawProbability = deck.drawProbability(i, 0, 0);
+          avgEmptyMoney += drawProbability * emptyHand.getNextHand(i).getMostMoneyMade();
+        }
+        emptyHand.setMoneyMadeIfHitting(avgEmptyMoney);
+      }
     }
   }
 

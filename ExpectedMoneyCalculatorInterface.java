@@ -35,21 +35,6 @@ public interface ExpectedMoneyCalculatorInterface {
   public String getBestMove(MinimalHand toFind);
 
   /**
-   * Going to assume the hand passed in has not been split before.
-   *
-   * @param deck
-   *          original deck with no cards of either hand taken out.
-   * @param startingHand
-   *          starting hand to calculate from
-   * @param dealerHand
-   *          hand of the dealer.
-   * @param rules
-   *          the rules object corresponding to this game of blackjack.
-   */
-  public void setMoney(Deck deck, VariableRankHand playerHand, VariableRankHand dealerHand, Rules rules,
-      boolean withSplitting, int desiredNumSimulations);
-
-  /**
    * sets the money made on splitting for the hand made when splitting on the
    * rank rankSplitOn. WILL ALSO UPDATE THE HITTING VALUES FOR THE HANDS OF SIZE
    * ONE AND ZERO as these are affected by splitting.

@@ -190,6 +190,7 @@ public class MinimalHand {
         newHand = new MinimalHand();
         newHand.addCard(i);
         newHand.setSplitHand(i);
+        this.rankSplitOn = i;
         this.removeCard(i); // take one of this rank out.
       }
     }
